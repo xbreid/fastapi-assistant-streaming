@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "FastAPI Assistant API"
     OPENAI_API_KEY: str
     OPENAI_ASSISTANT_ID: str
-    PROJECT_VERSION: str = "1.0.0"
+    PROJECT_VERSION: str = "1.0.1"
 
     class Config:
         env_file = ".env"

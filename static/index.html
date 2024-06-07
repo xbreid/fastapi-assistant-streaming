@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat se SZIF pomocníkem</title>
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            padding: 20px;
+        }
+        .container {
+            max-width: 600px;
+            margin: auto;
+        }
+        #response-text {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            overflow-y: auto;
+        }
+        .disabled {
+            background-color: #e9ecef;
+            opacity: 1;
+        }
+        .spinner-border {
+            display: none; /* Initially hidden */
+        }
+        .loading .spinner-border {
+            display: inline-block; /* Show when loading */
+        }
+        .loading #response-text {
+            display: none; /* Hide response text when loading */
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-center">Chatuj se SZIF pomocníkem</h1>
+        <div class="form-group">
+            <label for="user-input">Napiš svůj dotaz a zmáčkni Enter:</label>
+            <input type="text" id="user-input" class="form-control" placeholder="Například... je traktor způsobilý výdaj?" aria-describedby="inputHelp" />
+            <small id="inputHelp" class="form-text text-muted">Napište svůj dotaz a stiskněte Enter.</small>
+        </div>
+        <div id="response" class="mt-4">
+            <h2>Odpověď:</h2>
+            <div class="spinner-border text-primary" role="status">
+                <span class="sr-only">Loading...</span>
+            </div>
+            <pre id="response-text" class="p-3 border rounded" aria-live="polite"></pre>
+            <p><strong>Thread ID:</strong> <span id="thread-id-display"></span></p>
+        </div>
+    </div>
+
+    <script>
+        let threadId = null;
+
+        async function createThread() {
+            try {
+                const response = await fetch('/api/v1/assistant/threads', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                const data = await response.json();
+                return data.data.id;
+            } catch (error) {
+                console.error('Error creating thread:', error);
+                alert('Došlo k chybě při vytváření vlákna. Zkuste to prosím znovu.');
+            }
+        }
+
+        async function sendMessage() {
+            const userInput = document.getElementById('user-input');
+            const responseText = document.getElementById('response-text');
+            const threadIdDisplay = document.getElementById('thread-id-display');
+            const responseContainer = document.getElementById('response');
+
+            if (!threadId) {
+                threadId = await createThread();
+            }
+
+            threadIdDisplay.textContent = threadId;
+
+            // Disable the input field while processing the message and show spinner
+            userInput.disabled = true;
+            userInput.classList.add('disabled');
+            responseContainer.classList.add('loading');
+
+            try {
+                const response = await fetch('/api/v1/assistant/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'text/event-stream',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ text: userInput.value, thread_id: threadId })
+                });
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                responseText.textContent = '';
+
+                let firstChunkReceived = false;
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    
+                    if (!firstChunkReceived) {
+                        // Hide spinner and show response text
+                        responseContainer.classList.remove('loading');
+                        firstChunkReceived = true;
+                    }
+
+                    responseText.textContent += decoder.decode(value, { stream: true });
+                }
+            } catch (error) {
+                console.error('Error sending message:', error);
+                alert('Došlo k chybě při odesílání zprávy. Zkuste to prosím znovu.');
+            } finally {
+                // Re-enable the input field
+                userInput.value = '';
+                userInput.disabled = false;
+                userInput.classList.remove('disabled');
+                userInput.focus(); // Optionally set focus back to the input field
+            }
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        document.getElementById('user-input').addEventListener('keypress', handleKeyPress);
+    </script>
+</body>
+</html>
